@@ -12,7 +12,7 @@ class zero_y():
 
 
 class Grid(Dataset):
-    def __init__(self, dir, size=(3, 3), transform=None, target_transform=None, strip=False):
+    def __init__(self, dir, size=(3, 3), transform=None, target_transform=None, strip=False, download=True):
         self.path = f'{dir}/grid_{size[0]}_{size[1]}_{"strip" if strip else "no_strip"}'
 
         self.x = pd.read_csv(f'{self.path}.csv')

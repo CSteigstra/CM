@@ -1,6 +1,19 @@
-import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
+
+
+class TCN(nn.Module):
+    def __init__(self, input_size, output_size, num_channels, kernel_size, stride, dropout):
+        super(TCN, self).__init__()
+        self.tcn = TemporalConvNet(input_size, num_channels, kernel_size=kernel_size, stride=stride, dropout=dropout)
+        self.linear = nn.Linear(num_channels[-1], output_size)
+
+    def forward(self, inputs):
+        """Inputs have to have dimension (N, C_in, L_in)"""
+        y1 = self.tcn(inputs)  # input should have dimension (N, C, L)
+        o = self.linear(y1[:, :, -1])
+        # return F.log_softmax(o, dim=1)
+        return o
 
 
 class Chomp1d(nn.Module):
@@ -46,7 +59,7 @@ class TemporalBlock(nn.Module):
 
 
 class TemporalConvNet(nn.Module):
-    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels, stride=2, kernel_size=2, dropout=0.2):
         super(TemporalConvNet, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -54,7 +67,7 @@ class TemporalConvNet(nn.Module):
             dilation_size = 2 ** i
             in_channels = num_inputs if i == 0 else num_channels[i-1]
             out_channels = num_channels[i]
-            layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+            layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation_size,
                                      padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
         self.network = nn.Sequential(*layers)
