@@ -1,5 +1,5 @@
-#const w = 3.
-#const h = 3.
+% #const w = 2.
+% #const h = 2.
 
 pixel((2*I+DI, 2*J+DJ)) : DI=0..1, DJ=0..1:- I=0..h-1, J=0..w-1.
 
@@ -18,8 +18,8 @@ strip_h_LB(I):- h_paired(I), not pair((I, _), (I-1, _)).
 
 strip_hc(I;I+1):- pair((I, J1), (I+1, J1+1); (I+1, J1), (I, J1+1)),
   pair((I, J2), (I+1, J2); (I, J2+1), (I+1, J2+1)), not tile_n((I, J1), 4).
-strip_h(LB..UB):- strip_h_LB(LB), strip_h_UB(UB), LB<=UB,
-  LB=(UB;UB-1); { not h_paired(LB+1..UB-1); strip_hc(LB+1..UB-1) }=0.
+strip_h(R):- strip_h_LB(LB), strip_h_UB(UB), LB<=UB, R=LB..UB,
+  { not h_paired(R); strip_hc(R) }=0.
 
 v_paired(J):- pair((0, J), _;(h, J), _), pair((I, J), _) : I=1..h-1.
 strip_v_UB(J):- v_paired(J), not pair((_, J), (_, J+1)).
@@ -27,13 +27,13 @@ strip_v_LB(J):- v_paired(J), not pair((_, J), (_, J-1)).
 
 strip_vc(J;J+1):- pair((I1, J), (I1+1, J+1); (I1+1, J), (I1, J+1)),
   pair((I2, J), (I2, J+1); (I2+1, J), (I2+1, J+1)), not tile_n((I1, J), 4).
-strip_v(LB..UB):- strip_v_LB(LB), strip_v_UB(UB), LB<=UB,
-  LB=(UB;UB-1); { not v_paired(LB+1..UB-1); strip_vc(LB+1..UB-1) }=0.
+strip_v(R):- strip_v_LB(LB), strip_v_UB(UB), LB<=UB, R=LB..UB,
+  { not v_paired(R); strip_vc(R) }=0.
+  
+% :- not strip_h(_), not strip_v(_).
 
-:- not strip_h(_), not strip_v(_).
+%#maximize { 1, h(I) : strip_h(I) ; 1, v(J) : strip_v(J) }.
 
-% #maximize { 1, I : strip_h(I); 1, J : strip_v(J) }.
-
-#show pixel/1.
-#show strip_h/1.
-#show strip_v/1.
+% #show pixel/1.
+% #show strip_h/1.
+% #show strip_v/1.
