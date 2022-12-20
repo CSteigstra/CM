@@ -132,9 +132,13 @@ class Grid(Dataset):
         f_x.close()
 
 class GridIter(IterableDataset):
-    def __init__(self, root='.', size=(3, 3), length=0, strip=False, transform_x=None, generate=False, batch_size=1, train=True):
+    def __init__(self, root='.', size=(3, 3), length=0, strip=False, transform_x=None, generate=False, batch_size=1, stage='train'):
         super().__init__()
-        self.path = f'{root}/{"train" if train else "val"}/grid_{size[0]}_{size[1]}_{"strip" if strip else "no_strip"}'
+        if stage in ['train', 'val', 'test']:
+            self.path = f'{root}/{stage}/grid_{size[0]}_{size[1]}_{"strip" if strip else "no_strip"}'
+        else:
+            assert False, f'Unknown stage: {stage}'
+
         self.root = root
         self.size = size
         self.length = length
@@ -149,6 +153,8 @@ class GridIter(IterableDataset):
 
     def __line_mapper(self, line):
         grid, strip_h, strip_v = line.rstrip().split(';')
+        return self.__transform_x(grid), self.__transform_hv_bin(strip_h, strip_v)
+        return self.__transform_x(grid), *self.__transform_hv(strip_h, strip_v)
         return self.__transform_x(grid), self.__transform_y(strip_h, self.size[1]), self.__transform_y(strip_v, self.size[0])
 
     def __iter__(self):
@@ -186,6 +192,8 @@ class GridIter(IterableDataset):
 
         if self.transform_x:
             bin_x = self.transform_x(bin_x)
+        # print(bin_x.shape)
+        # assert 1 == 0
 
         return bin_x
 
@@ -195,8 +203,22 @@ class GridIter(IterableDataset):
         if y:
             idx = [int(_y)-1 for _y in y.split(',')]
             bin_y[idx] = 1
+    
+    def __transform_hv(self, h, v):
+        bin_y = torch.zeros((2, *self.size))
 
-        return bin_y
+        if h:
+            idx = [int(_y)-1 for _y in h.split(',')]
+            bin_y[0, idx, :] = 1
+        if v:
+            idx = [int(_y)-1 for _y in v.split(',')]
+            bin_y[1, :, idx] = 1
+
+        return bin_y.flatten(1)
+
+    def __transform_hv_bin(self, h, v):
+        return 1 if h or v else 0
+
 
     def gen(self, size=(3, 3), strip=False, seed=42):
         lp_file = f'{self.root}/strip-mode/gen_{"" if strip else "no_"}strip.lp'
@@ -214,7 +236,7 @@ class GridIter(IterableDataset):
 
         with tqdm() as pbar:
             for n in n_splits:
-                cur_args = args + ['-n', str(n), f'--seed={seed}']
+                cur_args = args + ['-n', str(n), f'--seed={np.random.randint(0, 999999999)}']
 
                 for line in ASP_runner(lp_file, cur_args, 'pixel'):
                     atoms = line.split(' ')

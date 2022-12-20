@@ -6,6 +6,7 @@ from pytorch_lightning.callbacks.progress import TQDMProgressBar
 from pytorch_lightning.loggers import CSVLogger
 from tcn.tcn import TCN
 from transformer.transformer import Transformer
+from vit_pytorch import SimpleViT
 
 parser = argparse.ArgumentParser(description='Sequence Modeling - Grids')
 parser.add_argument('--batch_size', type=int, default=32, metavar='N',
@@ -16,7 +17,7 @@ parser.add_argument('--dropout', type=float, default=0.05,
                     help='dropout applied to layers (default: 0.05)')
 # parser.add_argument('--clip', type=float, default=-1,
 #                     help='gradient clip, -1 means no clip (default: -1)')
-parser.add_argument('--epochs', type=int, default=20,
+parser.add_argument('--epochs', type=int, default=25,
                     help='upper epoch limit (default: 20)')
 parser.add_argument('--ksize', type=int, default=4,
                     help='kernel size (default: 4)')
@@ -72,7 +73,23 @@ def grid_2_ints(x):
 
     return torch.argmax(x, dim=1).flatten()
 
-train_sz, test_sz = (1,12), (1, 12) 
+def grid_2_channels(x):
+    row, col = x.shape
+    x = torch.nn.functional.unfold(x[None, :], (2,2), stride=2).swapaxes(0, 1)
+    x = x.view(row//2, col//2, 4).permute(2, 0, 1)
+    x = torch.nn.functional.pad(x, (0, 8-x.shape[-1], 0, 8-x.shape[-2]), 'constant', 0)
+    return x
+    
+# def pad_grid(x, max, rand=False):
+#     h_pad, v_pad = 
+#     if rand:
+
+#     x = torch.nn.functional.pad(x, (0, max-x.shape[1], 0, max-x.shape[0]), 'constant', 0)
+    
+#     return x
+
+
+train_sz, test_sz = [(4, 4), (5, 5), (7,7)], [(8, 8)] 
 # in_size = (train_sz[0] + 1) * (train_sz[1] + 1) * 4
 
 
@@ -81,11 +98,17 @@ train_sz, test_sz = (1,12), (1, 12)
 
 # base = Transformer(
 # train_sz[0]*train_sz[1], train_sz[0]+train_sz[1], 256, nhead=8, num_encoder_layers=6, num_decoder_layers=6, dim_feedforward=2048, dropout=0.1, activation='relu')
-base = Transformer(4, 1, 256, nhead=4, num_encoder_layers=4, dim_feedforward=1028, dropout=0.1, activation='relu')
+# base = Transformer(4, 2, 512, nhead=4, num_encoder_layers=6, dim_feedforward=2048, dropout=0.1, activation='relu')
+
+image_sz = max([max(x) for x in train_sz + test_sz])
+
+transform_x = lambda x: torch.nn.functional.pad(grid_2_channels(x), (0, image_sz-x.shape[1], 0, image_sz-x.shape[0]), 'constant', 0)
+
+base = SimpleViT(image_size=image_sz, patch_size=1, num_classes=1, dim=64, depth=4, heads=6, mlp_dim=128, channels=4)
 
 # base = TCN(in_size, train_sz[0]*train_sz[1], [args.nhid] * args.levels, kernel_size=args.ksize, dropout=args.dropout, stride=args.stride)
 
-model = Model(base, ".", learning_rate=args.lr, batch_size=args.batch_size, transform_x=grid_2_ints, train_sz=[train_sz], test_sz=[test_sz])
+model = Model(base, ".", learning_rate=args.lr, batch_size=args.batch_size, transform_x=grid_2_channels, train_sz=train_sz, test_sz=test_sz)
 
 trainer = Trainer(
     accelerator="auto",
@@ -95,3 +118,6 @@ trainer = Trainer(
     logger=CSVLogger(save_dir="logs/"),
 )
 trainer.fit(model)
+
+# Test
+trainer.test(model)
