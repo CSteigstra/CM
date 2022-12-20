@@ -1,1 +1,4 @@
 data
+model/logs/*
+*__pycache__/
+*.csv
