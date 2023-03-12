@@ -21,6 +21,57 @@ class zero_y():
     def __getitem__(self, _):
         return self.y
 
+# def grid_2_channels(x):
+#     row, col = x.shape
+#     x = torch.nn.functional.unfold(x[None, :], (2,2), stride=2).swapaxes(0, 1)
+#     x = x.view(row//2, col//2, 4).permute(2, 0, 1)
+#     x = torch.nn.functional.pad(x, (0, 8-x.shape[-1], 0, 8-x.shape[-2]), 'constant', 0)
+#     return x
+def grid_2_channels(x):
+    row, col = x.shape
+    x = torch.nn.functional.unfold(x[None, :], (2,2), stride=2).swapaxes(0, 1)
+    x = x.view(row//2, col//2, 4).float()
+    return x
+
+def grid_pad(x):
+    x = torch.cat((x[-1:], x), dim=0)
+    x = torch.cat((x[:, -1:], x), dim=1)
+    x = x[:-1,:-1]
+
+    # x = torch.cat((x, torch.full((x.shape[0], 2), -1)), dim=1)
+    # x = torch.cat((torch.full((x.shape[0], 2), -1), x), dim=1)
+
+    return x.view(1, *x.shape)
+
+def grid_2_squares(x):
+    row, col = x.shape
+
+    x = torch.cat((x[-2:], x), dim=0)
+    x = torch.cat((x[:, -2:], x), dim=1)
+    x = torch.nn.functional.unfold(x[None, :], (4,4), stride=2).T.reshape(-1, 4)
+    xx = torch.stack((x[::4].flatten(), x[1::4].flatten(), x[2::4].flatten(), x[3::4].flatten()))
+    # half_sz = x.shape[0] // 2
+    # print(half_sz)
+    xx = torch.cat(xx.split(col * 2))
+
+    return xx.view(1, *x.shape)
+
+# def pad_grid(x):
+#     x = torch.cat((x[-2:], x), dim=0)
+#     x = torch.cat((x[:, -2:], x), dim=1)
+
+#     # x = 
+
+#     pad_h, pad_v = 16-x.shape[-1], 16-x.shape[-2]
+#     r_pad_h, r_pad_v = np.random.randint(0, pad_h//2+1)*2, np.random.randint(0, pad_v//2+1)*2
+#     x = torch.nn.functional.pad(x, (pad_h-r_pad_h, r_pad_h, pad_v-r_pad_v, r_pad_v), 'constant', 0)
+
+    # x = torch.nn.functional.pad(x, (0, 18-x.shape[-1], 0, 18-x.shape[-2]), 'constant', 0)
+    # print(x.shape)
+    # assert 1 == 2
+
+    # return x.view(1, *x.shape)
+
 # def ASP_runner(lp_file, args, filter='pixel', n=0):
 #     args = ['clingo', '--outf=2', lp_file] + args + ['-t', '2', "--rand-freq=1.0"]
 #     app = subprocess.Popen(args, stdout=subprocess.PIPE, universal_newlines=True)
@@ -192,6 +243,7 @@ class GridIter(IterableDataset):
 
         if self.transform_x:
             bin_x = self.transform_x(bin_x)
+
         # print(bin_x.shape)
         # assert 1 == 0
 

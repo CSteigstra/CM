@@ -10,7 +10,7 @@ class TCN(nn.Module):
 
     def forward(self, inputs):
         """Inputs have to have dimension (N, C_in, L_in)"""
-        y1 = self.tcn(inputs)  # input should have dimension (N, C, L)
+        y1 = self.tcn(inputs) # input should have dimension (N, C, L)
         o = self.linear(y1[:, :, -1])
         # return F.log_softmax(o, dim=1)
         return o
@@ -59,7 +59,7 @@ class TemporalBlock(nn.Module):
 
 
 class TemporalConvNet(nn.Module):
-    def __init__(self, num_inputs, num_channels, stride=2, kernel_size=2, dropout=0.2):
+    def __init__(self, num_inputs, num_channels, stride=1, kernel_size=4, dropout=0.2):
         super(TemporalConvNet, self).__init__()
         layers = []
         num_levels = len(num_channels)
@@ -69,6 +69,7 @@ class TemporalConvNet(nn.Module):
             out_channels = num_channels[i]
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation_size,
                                      padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+            # break
 
         self.network = nn.Sequential(*layers)
 

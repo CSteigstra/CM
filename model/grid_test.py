@@ -7,6 +7,8 @@ from pytorch_lightning.loggers import CSVLogger
 from tcn.tcn import TCN
 from transformer.transformer import Transformer
 from vit_pytorch import SimpleViT
+import numpy as np
+from cnn.cnn import CNN
 
 parser = argparse.ArgumentParser(description='Sequence Modeling - Grids')
 parser.add_argument('--batch_size', type=int, default=32, metavar='N',
@@ -17,7 +19,7 @@ parser.add_argument('--dropout', type=float, default=0.05,
                     help='dropout applied to layers (default: 0.05)')
 # parser.add_argument('--clip', type=float, default=-1,
 #                     help='gradient clip, -1 means no clip (default: -1)')
-parser.add_argument('--epochs', type=int, default=25,
+parser.add_argument('--epochs', type=int, default=20,
                     help='upper epoch limit (default: 20)')
 parser.add_argument('--ksize', type=int, default=4,
                     help='kernel size (default: 4)')
@@ -50,6 +52,8 @@ def conv_wrap(x, wrap=False, binary=True):
         x = torch.cat((x[-1:], x, x[:1]), dim=0)
         x = torch.cat((x[:, -1:], x, x[:, :1]), dim=1)
 
+    return x
+
     # View as if a 2x2 convolution with stride 2.
     x = torch.nn.functional.unfold(x[None, :], (2,2), stride=2).swapaxes(0, 1)
 
@@ -57,9 +61,19 @@ def conv_wrap(x, wrap=False, binary=True):
         # Convert [1, 0, 0, 0] to 0, [0, 1, 0, 0] to 1, etc.
         x = torch.argmax(x, dim=1)
 
-    return x.flatten()
+    return x
+    # return x.flatten()
     # Maybe flatten
     # return x.view(x.shape[0], -1)
+
+def pad_grid(x):
+    x = torch.cat((x[-1:], x), dim=0)
+    x = torch.cat((x[:, -1:], x), dim=1)
+
+    # print(x.shape)
+    # assert 1 == 2
+
+    return x.view(1, *x.shape)
 
 def grid_2_ints(x):
     # Encode each 2x2 subgrid as a single integer.
@@ -76,9 +90,56 @@ def grid_2_ints(x):
 def grid_2_channels(x):
     row, col = x.shape
     x = torch.nn.functional.unfold(x[None, :], (2,2), stride=2).swapaxes(0, 1)
-    x = x.view(row//2, col//2, 4).permute(2, 0, 1)
-    x = torch.nn.functional.pad(x, (0, 8-x.shape[-1], 0, 8-x.shape[-2]), 'constant', 0)
+    x = x.argmax(dim=1).view(row//2, col//2, 1).permute(2, 0, 1).float()
+    # x = torch.ones((row//2, col//2, 2))
+    # x = x.view(row//2, col//2, 4).permute(2, 0, 1)
+    # pad_h, pad_v = 4-x.shape[-1], 4-x.shape[-2]
+    # r_pad_h, r_pad_v = np.random.randint(0, pad_h+1), np.random.randint(0, pad_v+1)
+    # x = torch.nn.functional.pad(x, (pad_h-r_pad_h, r_pad_h, pad_v-r_pad_v, r_pad_v), 'constant', 0)
+    # if np.random.rand() < 0.5:
+    #     x = x.swapaxes(-1, -2)
+    # x = torch.nn.functional.pad(x, (0, 8-x.shape[-1], 0, 8-x.shape[-2]), 'constant', 0)
     return x
+
+# def graph_map(x, wrap=True):
+#     h, w = x.shape[0] // 2, x.shape[1] // 2
+#     adj = torch.zeros((h*w, h*w))
+
+
+# def graph_map(x, wrap=True):
+#     # Map (i, j) to i * x.shape[1] + j
+#     h, w = x.shape[0] // 2, x.shape[1] // 2
+#     # adj = torch.zeros((h*w, h*w))
+
+#     # if wrap:
+#     #     # Wrap around padding once for convolution.
+#     #     x = torch.cat((x[-1:], x, x[:1]), dim=0)
+#     #     x = torch.cat((x[:, -1:], x, x[:, :1]), dim=1)
+
+#     # h, w = x.shape
+#     # h, w = x.shape[1] // 2, x.shape[2] // 2
+
+#     # View as if a 2x2 convolution with stride 2.
+#     # x = torch.nn.functional.unfold(x[None, :], (2,2), stride=2).swapaxes(0, 1)
+#     # adj = torch.zeros((x.shape[0], x.shape[0]))
+
+#     adj = torch.zeros((h*w, h*w))
+
+#     for i in range(h):
+#         for j in range(w):
+#             x_i, x_j = i * 2, j * 2
+#             if x[x_i, x_j] == 0:
+#                 continue
+
+#             if x[x_i, x_j-1] == 1:
+#                 adj[i*w+j, i*w+j-1] = 1
+#             if x[x_i-1, x_j] == 1:
+#                 adj[i*w+j, (i-1)*w+j] = 1
+#             if x[x_i-1, x_j-1] == 1:
+#                 adj[i*w+j, (i-1)*w+(j-1)] = 1
+
+#     return adj   
+
     
 # def pad_grid(x, max, rand=False):
 #     h_pad, v_pad = 
@@ -89,7 +150,7 @@ def grid_2_channels(x):
 #     return x
 
 
-train_sz, test_sz = [(4, 4), (5, 5), (7,7)], [(8, 8)] 
+train_sz, test_sz = [(4, 4)], [(4, 4)] 
 # in_size = (train_sz[0] + 1) * (train_sz[1] + 1) * 4
 
 
@@ -102,13 +163,20 @@ train_sz, test_sz = [(4, 4), (5, 5), (7,7)], [(8, 8)]
 
 image_sz = max([max(x) for x in train_sz + test_sz])
 
-transform_x = lambda x: torch.nn.functional.pad(grid_2_channels(x), (0, image_sz-x.shape[1], 0, image_sz-x.shape[0]), 'constant', 0)
+# transform_x = lambda x: torch.nn.functional.pad(grid_2_channels(x), (0, image_sz-x.shape[1], 0, image_sz-x.shape[0]), 'constant', 0)
 
-base = SimpleViT(image_size=image_sz, patch_size=1, num_classes=1, dim=64, depth=4, heads=6, mlp_dim=128, channels=4)
+# base = SimpleViT(image_size=image_sz, patch_size=1, num_classes=2, dim=256, depth=6, heads=12, mlp_dim=512, channels=1)
+# base = SimpleViT(image_size=image_sz, patch_size=1, num_classes=1, dim=64, depth=4, heads=6, mlp_dim=128, channels=4)
 
 # base = TCN(in_size, train_sz[0]*train_sz[1], [args.nhid] * args.levels, kernel_size=args.ksize, dropout=args.dropout, stride=args.stride)
 
-model = Model(base, ".", learning_rate=args.lr, batch_size=args.batch_size, transform_x=grid_2_channels, train_sz=train_sz, test_sz=test_sz)
+# model = Model(base, "/mnt/d/AI/thesis/CM/asp_data/small", learning_rate=args.lr, batch_size=args.batch_size, transform_x=grid_2_channels, train_sz=train_sz, test_sz=test_sz)
+
+base = CNN((train_sz[0][0]*2+1, train_sz[0][1]*2+1), 2)
+
+# model = Model(base, "/mnt/d/AI/thesis/CM/asp_data/small", learning_rate=args.lr, batch_size=args.batch_size, transform_x=pad_grid, train_sz=train_sz, test_sz=test_sz)
+model = Model(base, ".", learning_rate=args.lr, batch_size=args.batch_size, transform_x=pad_grid, train_sz=train_sz, test_sz=test_sz)
+
 
 trainer = Trainer(
     accelerator="auto",
@@ -120,4 +188,5 @@ trainer = Trainer(
 trainer.fit(model)
 
 # Test
+# model = Model.load_from_checkpoint("logs/lightning_logs/version_46/checkpoints/epoch=24-step=29300.ckpt")
 trainer.test(model)
